@@ -1,34 +1,24 @@
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+services:
+  # Using local Ollama installation instead of Docker container
 
-    steps:
-      - name: SSH into EC2 and deploy
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            # Navigate to the app directory
-            cd /home/ubuntu/open-webui
+  open-webui:
+    build:
+      context: .
+      args:
+        OLLAMA_BASE_URL: '/ollama'
+      dockerfile: Dockerfile
+    container_name: open-webui
+    volumes:
+      - open-webui:/app/backend/data
+    # No dependency on Docker Ollama since we're using local installation
+    ports:
+      - ${OPEN_WEBUI_PORT-3000}:8080
+    environment:
+      - 'OLLAMA_BASE_URL=http://host.docker.internal:11434'
+      - 'WEBUI_SECRET_KEY='
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped
 
-            # Pull the latest code
-            git reset --hard HEAD
-            git pull origin main
-
-            # Build the new Docker image (without cache)
-            docker-compose build --no-cache
-
-            # Start the new container in the background (no downtime)
-            docker-compose up -d --remove-orphans --no-deps
-
-            # Check if the new container is running
-            NEW_CONTAINER=$(docker ps -q --filter "name=open-webui" | head -n 1)
-            OLD_CONTAINER=$(docker ps -q --filter "name=open-webui" | tail -n 1)
-
-            if [ -n "$NEW_CONTAINER" ] && [ "$NEW_CONTAINER" != "$OLD_CONTAINER" ]; then
-              # Once the new container is running, stop the old container
-              docker stop $OLD_CONTAINER
-              docker rm $OLD_CONTAINER
-            fi
+volumes:
+  open-webui: {}
