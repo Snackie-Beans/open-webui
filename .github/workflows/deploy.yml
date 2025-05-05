@@ -1,10 +1,9 @@
 name: Deploy to EC2
 
-# Trigger the workflow on push to the main branch
 on:
   push:
     branches:
-      - main  # You can change this to any branch you want to trigger on
+      - main
 
 jobs:
   deploy:
@@ -13,41 +12,45 @@ jobs:
     steps:
       # Step 1: Checkout the code
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4  # Updated to latest version
 
       # Step 2: Set up SSH for EC2 access
       - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
+          chmod 600 /tmp/ssh_key
+          eval $(ssh-agent -s)
+          ssh-add /tmp/ssh_key
 
       # Step 3: SSH into EC2 and deploy
       - name: SSH into EC2 and deploy
         run: |
-          ssh -o StrictHostKeyChecking=no -i /tmp/ssh_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -i /tmp/ssh_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e  # Exit on error
+
             # Navigate to the app directory
-            cd /home/ubuntu/my-app
+            cd /home/ubuntu/open-webui || { echo "Directory not found"; exit 1; }
 
             # Pull the latest code
             git reset --hard HEAD
-            git pull origin main
+            git pull origin main || { echo "Git pull failed"; exit 1; }
 
             # Build the new Docker image (without cache)
-            docker-compose build --no-cache
+            docker-compose build --no-cache || { echo "Docker build failed"; exit 1; }
 
-            # Start the new container in the background (no downtime)
-            docker-compose up -d --remove-orphans --no-deps
+            # Start the new container in the background
+            docker-compose up -d --remove-orphans --no-deps || { echo "Docker up failed"; exit 1; }
 
-            # Check logs for the newly started container
-            docker logs -f open-webui  # Follow logs of the running container
+            # Check logs for the newly started container (limit output)
+            docker logs --tail 100 open-webui
 
             # Check if the new container is running
             NEW_CONTAINER=$(docker ps -q --filter "name=open-webui" | head -n 1)
             OLD_CONTAINER=$(docker ps -q --filter "name=open-webui" | tail -n 1)
 
             if [ -n "$NEW_CONTAINER" ] && [ "$NEW_CONTAINER" != "$OLD_CONTAINER" ]; then
-              # Once the new container is running, stop the old container
-              docker stop $OLD_CONTAINER
-              docker rm $OLD_CONTAINER
+              # Stop and remove the old container
+              docker stop "$OLD_CONTAINER" || echo "Failed to stop old container"
+              docker rm "$OLD_CONTAINER" || echo "Failed to remove old container"
             fi
           EOF
