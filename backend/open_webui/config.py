@@ -25,7 +25,6 @@ from open_webui.env import (
     OFFLINE_MODE,
     OPEN_WEBUI_DIR,
     WEBUI_AUTH,
-    WEBUI_FAVICON_URL,
     WEBUI_NAME,
     log,
 )
