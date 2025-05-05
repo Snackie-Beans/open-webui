@@ -17,9 +17,25 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # Navigate to the app directory
             cd /home/ubuntu/open-webui
+
+            # Pull the latest code
             git reset --hard HEAD
             git pull origin main
-            docker compose down
-            docker compose build --no-cache
-            docker compose up -d --remove-orphans
+
+            # Build the new Docker image (without cache)
+            docker-compose build --no-cache
+
+            # Start the new container in the background with a different name
+            docker-compose up -d --remove-orphans --no-deps
+
+            # Check if the new container is running
+            NEW_CONTAINER=$(docker ps -q --filter "name=my-app" | head -n 1)
+            OLD_CONTAINER=$(docker ps -q --filter "name=my-app" | tail -n 1)
+
+            if [ -n "$NEW_CONTAINER" ] && [ "$NEW_CONTAINER" != "$OLD_CONTAINER" ]; then
+              # Once the new container is running, stop the old container
+              docker stop $OLD_CONTAINER
+              docker rm $OLD_CONTAINER
+            fi
