@@ -1,0 +1,25 @@
+name: EC2 Auto Deploy
+
+on:
+  push:
+    branches:
+      - main  # or your desired branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH into EC2 and deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/open-webui
+            git reset --hard HEAD
+            git pull origin main
+            docker compose down
+            docker compose build --no-cache
+            docker compose up -d --remove-orphans
