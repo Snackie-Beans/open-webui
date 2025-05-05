@@ -1,17 +1,32 @@
+name: Deploy to EC2
+
+# Trigger the workflow on push to the main branch
+on:
+  push:
+    branches:
+      - main  # You can change this to any branch you want to trigger on
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: SSH into EC2 and deploy
-        uses: appleboy/ssh-action@v1.0.0
+      # Step 1: Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Set up SSH for EC2 access
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      # Step 3: SSH into EC2 and deploy
+      - name: SSH into EC2 and deploy
+        run: |
+          ssh -o StrictHostKeyChecking=no -i /tmp/ssh_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             # Navigate to the app directory
-            cd /home/ubuntu/open-webui
+            cd /home/ubuntu/my-app
 
             # Pull the latest code
             git reset --hard HEAD
@@ -23,6 +38,9 @@ jobs:
             # Start the new container in the background (no downtime)
             docker-compose up -d --remove-orphans --no-deps
 
+            # Check logs for the newly started container
+            docker logs -f open-webui  # Follow logs of the running container
+
             # Check if the new container is running
             NEW_CONTAINER=$(docker ps -q --filter "name=open-webui" | head -n 1)
             OLD_CONTAINER=$(docker ps -q --filter "name=open-webui" | tail -n 1)
@@ -32,3 +50,4 @@ jobs:
               docker stop $OLD_CONTAINER
               docker rm $OLD_CONTAINER
             fi
+          EOF
