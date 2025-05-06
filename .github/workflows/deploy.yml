@@ -26,31 +26,25 @@ jobs:
       - name: SSH into EC2 and deploy
         run: |
           ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -i /tmp/ssh_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            set -e  # Exit on error
+            set -e  # Exit on any error
 
-            # Navigate to the app directory
             cd /home/ubuntu/open-webui || { echo "Directory not found"; exit 1; }
 
-            # Pull the latest code
+            echo "🔄 Resetting and pulling latest code..."
             git reset --hard HEAD
             git pull origin main || { echo "Git pull failed"; exit 1; }
 
-            # Build the new Docker image (without cache)
+            echo "🔨 Building Docker images..."
             docker-compose build --no-cache || { echo "Docker build failed"; exit 1; }
 
-            # Start the new container in the background
-            docker-compose up -d --remove-orphans --no-deps || { echo "Docker up failed"; exit 1; }
+            echo "🛑 Stopping old container gracefully..."
+            docker-compose stop open-webui || echo "No running container to stop"
 
-            # Check logs for the newly started container (limit output)
-            docker logs --tail 100 open-webui
+            echo "🚀 Starting new container..."
+            docker-compose up -d --remove-orphans || { echo "Docker up failed"; exit 1; }
 
-            # Check if the new container is running
-            NEW_CONTAINER=$(docker ps -q --filter "name=open-webui" | head -n 1)
-            OLD_CONTAINER=$(docker ps -q --filter "name=open-webui" | tail -n 1)
+            echo "📦 Checking logs for confirmation..."
+            docker logs --tail=100 open-webui || echo "Unable to fetch logs"
 
-            if [ -n "$NEW_CONTAINER" ] && [ "$NEW_CONTAINER" != "$OLD_CONTAINER" ]; then
-              # Stop and remove the old container
-              docker stop "$OLD_CONTAINER" || echo "Failed to stop old container"
-              docker rm "$OLD_CONTAINER" || echo "Failed to remove old container"
-            fi
+            echo "✅ Deployment finished successfully."
           EOF
