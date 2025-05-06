@@ -38,7 +38,7 @@ jobs:
             docker-compose build --no-cache || { echo "Docker build failed"; exit 1; }
 
             echo "🛑 Stopping old container gracefully..."
-            docker-compose stop open-webui || echo "No running container to stop"
+            docker-compose down || echo "No running container to stop"
 
             echo "🚀 Starting new container..."
             docker-compose up -d --remove-orphans || { echo "Docker up failed"; exit 1; }
